@@ -28,7 +28,9 @@ namespace OnlineShop
         public MainWindow()
         {
             InitializeComponent();
+            baza.WczytajWszystkie();
 
+            // ładowanie do tabelek
             dgAdresy.ItemsSource = baza.adresy;
             dgKonta.ItemsSource = baza.konta;
             dgOceny.ItemsSource = baza.oceny;
@@ -37,37 +39,20 @@ namespace OnlineShop
             dgTransakcje.ItemsSource = baza.transakcje;
             dgZamowienia.ItemsSource = baza.zamowienia;
 
-            /*
-            Baza.Visibility = Visibility.Hidden;
-            
-            ListaProduktow.DataContext = OnlineShop.DBConn.Read("SELECT * FROM Produkty", "Produkty");
-            
-            ListaTransakcji.DataContext = OnlineShop.DBConn.Read(
-                "SELECT Transakcje.ID AS ID, Konta.Nazwa AS Nazwa_Konta, Produkty.Nazwa_Produktu AS Produkt, Transakcje.Numer_Paragonu AS Numer_Paragonu, Transakcje.Kwota AS Kwota " +
-                "FROM Produkty INNER JOIN((Konta INNER JOIN Transakcje ON Konta.[ID] = Transakcje.[ID_Konta]) " +
-                "INNER JOIN Zamówienia ON Transakcje.[ID] = Zamówienia.[ID_Transakcji]) ON Produkty.[ID] = Zamówienia.[ID_Produktu]; ", "Transakcje");
+            // ładowanie zasobów do panelu
+            k_cb.ItemsSource = baza.role.Select(x => x.rola).ToList();
+            o_Ocena.ItemsSource = new List<int>(new int[] { 1, 2, 3, 4, 5 });
+            o_Użytkownik.ItemsSource = baza.WczytajProduktyKupione(aktualnyUzytkownik);
+        }
 
-            ListaAdresy.DataContext = OnlineShop.DBConn.Read(
-                "SELECT ID, Kod_Pocztowy AS KP, Miejscowość AS MIASTO, Ulica, Dom_Mieszkanie AS DOM, Imie, Nazwisko, Telefon FROM Adresy", "Adresy");
-
-            ListaKonta.DataContext = OnlineShop.DBConn.Read(
-                "SELECT Konta.ID AS ID, Konta.Hasło AS Hasło, Konta.Email AS Email, Konta.Nazwa AS Nazwa, Role.Nazwa AS Rola " +
-                "FROM Role INNER JOIN Konta ON Role.[ID] = Konta.[ID_Rola]", "Konta");
-
-            ListaRole.DataContext = OnlineShop.DBConn.Read("SELECT * FROM Role", "Role");
-
-            ListaOceny.DataContext = OnlineShop.DBConn.Read(
-                "SELECT Oceny.ID AS ID, Oceny.Ocena AS Ocena, Oceny.Komentarz AS Komentarz, Produkty.Nazwa_Produktu AS Produkt, Konta.Nazwa AS Konto " +
-                "FROM Produkty INNER JOIN(Konta INNER JOIN Oceny ON Konta.[ID] = Oceny.[ID_Użytkownika]) " +
-                "ON Produkty.[ID] = Oceny.[ID_Produktu]; ", "Oceny");
-
-            ListaZamowienia.DataContext = OnlineShop.DBConn.Read(
-                "SELECT Zamówienia.ID AS ID, Zamówienia.ID_Transakcji AS ID_TR, Produkty.Nazwa_Produktu AS P_Nazwa, Produkty.Ilość AS Ilość, " +
-                "Produkty.EAN AS EAN, Produkty.SKU AS SKU " +
-                "FROM Produkty INNER JOIN Zamówienia ON Produkty.[ID] = Zamówienia.[ID_Produktu];", "Zamówienia");
-            */
-
-
+        private void Odswiez_Baze() {
+            if (aktualnyUzytkownik.rola == "klient") {
+                baza.WczytajWszystkieUzytkownika(aktualnyUzytkownik);
+            } 
+            else
+            {
+                baza.WczytajWszystkie();
+            }
         }
 
         private void Button_Click_Login(object sender, RoutedEventArgs e)
@@ -121,14 +106,12 @@ namespace OnlineShop
                         zDodaj.IsEnabled = rola.zamowienia_z ? true : false;
                         zUsun.IsEnabled = rola.zamowienia_z ? true : false;
 
-                        // TODO: w guzikach trzeba sprawdzić czy zalogowany to klient 
-                        // -> if (aktualnyUzytkownik.rola == "Klient")
+ 
 
                         // TODO: zapis - użytkownik nie może zmienić swojej nazwy itd...
 
-                        // TODO: wczytaj odpowiednie tabele
-                        if (rola.rola == "Klient")
-                            baza.WczytajWszystkieUzytkownika(konto);
+                        // wczytaj odpowiednie tabele
+                        Odswiez_Baze();
                         
 
                         Baza.Visibility = Visibility.Visible;
@@ -143,6 +126,12 @@ namespace OnlineShop
 
         private void Button_Click_Dodaj_Produkt(object sender, RoutedEventArgs e)
         {
+            if (baza.produkty.Exists(x => x.SKU == PSKU.Text))
+            {
+                MessageBox.Show("Już istnieje element o tym SKU!");
+                return;
+            }
+
             var cmd = new OleDbCommand(
                 $"INSERT INTO Produkty (SKU, EAN, Nazwa, Opis, Cena, Ilość) " +
                 $"VALUES ('{PSKU.Text}', '{PEAN.Text}', '{PNazwa.Text}', '{POpis.Text}', " +
@@ -152,12 +141,18 @@ namespace OnlineShop
             baza.conn.Open();
             cmd.ExecuteNonQuery();
             baza.conn.Close();
-            baza.WczytajWszystkie();
+            Odswiez_Baze();
             dgProdukty.Items.Refresh();
         }
 
         private void Button_Click_Aktualizuj_Produkt(object sender, RoutedEventArgs e)
         {
+            if (!baza.produkty.Exists(x => x.SKU == PSKU.Text))
+            {
+                MessageBox.Show("Brak takiego wpisu!");
+                return;
+            }
+
             var cmd = new OleDbCommand(
                 $"UPDATE Produkty SET SKU='{PSKU.Text}', EAN='{PEAN.Text}', Nazwa='{PNazwa.Text}', " +
                 $"Opis='{POpis.Text}', Cena={decimal.Parse(PCena.Text)}, Ilość={int.Parse(PIlosc.Text)} " +
@@ -167,7 +162,7 @@ namespace OnlineShop
             baza.conn.Open();
             cmd.ExecuteNonQuery();
             baza.conn.Close();
-            baza.WczytajWszystkie();
+            Odswiez_Baze();
             dgProdukty.Items.Refresh();
         }
 
@@ -193,10 +188,191 @@ namespace OnlineShop
             baza.conn.Open();
             cmd.ExecuteNonQuery();
             baza.conn.Close();
-            baza.WczytajWszystkie();
+            Odswiez_Baze();
             dgProdukty.Items.Refresh();
         }
 
-       
+        private void Button_Click_Dodaj_Konto(object sender, RoutedEventArgs e)
+        {
+            foreach (var konto in baza.konta)
+            {
+                if (konto.nazwa == k_uzytkownik.Text)
+                {
+                    MessageBox.Show($"Już istnieje element taki użytkownik {k_uzytkownik.Text}!");
+                    return;
+                }
+
+            }
+
+            var cmd = new OleDbCommand(
+                $"INSERT INTO Konta (Użytkownik, Email, Hasło, Rola) " +
+                $"VALUES ('{k_uzytkownik.Text}', '{k_email.Text}', '{k_haslo.Text}', '{k_cb.SelectedValue}' );",
+                baza.conn);
+
+            baza.conn.Open();
+            cmd.ExecuteNonQuery();
+            baza.conn.Close();
+            Odswiez_Baze();
+            dgKonta.Items.Refresh();
+        }
+
+        private void Button_Click_Aktualizuj_Konto(object sender, RoutedEventArgs e)
+        {
+            if (!baza.konta.Exists(x => x.nazwa.Equals(k_uzytkownik.Text)))
+            {
+                MessageBox.Show("Błąd nazwy użytkownika!");
+                return;
+            }
+
+            var cmd = new OleDbCommand(
+                $"UPDATE Konta SET Email='{k_email.Text}', " +
+                $"Hasło='{k_haslo.Text}', Rola='{k_cb.SelectedItem}' " +
+                $"WHERE Użytkownik='{k_uzytkownik.Text}';",
+                baza.conn);
+
+            baza.conn.Open();
+            cmd.ExecuteNonQuery();
+            baza.conn.Close();
+            baza.WczytajWszystkie();
+            dgKonta.Items.Refresh();
+        }
+
+        private void Button_Click_Usun_Konto(object sender, RoutedEventArgs e)
+        {
+            if (baza.transakcje.Exists(x => x.uzytkownik == k_uzytkownik.Text))
+            {
+                MessageBox.Show($"Produkt jest połączony relacją z Transakcjami!");
+                return;
+            }
+            if (baza.adresy.Exists(x => x.uzytkownik == k_uzytkownik.Text))
+            {
+                MessageBox.Show($"Produkt jest połączony relacją z Adresami!");
+                return;
+            }
+            if (baza.oceny.Exists(x => x.uzytkownik == k_uzytkownik.Text))
+            {
+                MessageBox.Show($"Produkt jest połączony relacją z Ocenami!");
+            }
+
+            var cmd = new OleDbCommand(
+                $"DELETE FROM Konta WHERE Użytkownik='{k_uzytkownik.Text}'", baza.conn);
+
+            baza.conn.Open();
+            cmd.ExecuteNonQuery();
+            baza.conn.Close();
+            baza.WczytajWszystkie();
+            dgKonta.Items.Refresh();
+        }
+
+        private void Button_Click_Dodaj_Role(object sender, RoutedEventArgs e)
+        {
+            foreach (var rola in baza.role)
+            {
+                if (rola.rola == R_Nazwa.Text)
+                {
+                    MessageBox.Show($"Podana rola już istnieje!");
+                    return;
+                }
+
+                if (R_Nazwa.Text == "")
+                {
+                    MessageBox.Show($"Podaj nazwe roli!");
+                    return;
+                }
+
+            }
+
+            var cmd = new OleDbCommand(
+                $"INSERT INTO Role (" +
+                $"  Rola," +
+                $"  Adresy_Odczyt," +
+                $"  Adresy_Zapis," +
+                $"  Konta_Odczyt," +
+                $"  Konta_Zapis," +
+                $"  Oceny_Odczyt," +
+                $"  Oceny_Zapis," +
+                $"  Produkty_Odczyt," +
+                $"  Produkty_Zapis," +
+                $"  Role_Odczyt," +
+                $"  Role_Zapis," +
+                $"  Transakcje_Odczyt," +
+                $"  Transakcje_Zapis," +
+                $"  Zamówienia_Odczyt," +
+                $"  Zamówienia_Zapis)" +
+                $"VALUES (" +
+                $"  '{R_Nazwa.Text}'," +
+                $"  '{((bool)R_Adresy_Odczyt.IsChecked ? 1 : 0)}'," +
+                $"  '{((bool)R_Adresy_Zapis.IsChecked ? 1 : 0)}'," +
+                $"  '{((bool)R_Konta_Odczyt.IsChecked ? 1 : 0)}'," +
+                $"  '{((bool)R_Konta_Zapis.IsChecked ? 1 : 0)}'," +
+                $"  '{((bool)R_Oceny_Odczyt.IsChecked ? 1 : 0)}'," +
+                $"  '{((bool)R_Oceny_Zapis.IsChecked ? 1 : 0)}'," +
+                $"  '{((bool)R_Produkty_Odczyt.IsChecked ? 1 : 0)}'," +
+                $"  '{((bool)R_Produkty_Zapis.IsChecked ? 1 : 0)}'," +
+                $"  '{((bool)R_Role_Odczyt.IsChecked ? 1 : 0)}'," +
+                $"  '{((bool)R_Role_Zapis.IsChecked ? 1 : 0)}'," +
+                $"  '{((bool)R_Transakcje_Odczyt.IsChecked ? 1 : 0)}'," +
+                $"  '{((bool)R_Transakcje_Zapis.IsChecked ? 1 : 0)}'," +
+                $"  '{((bool)R_Zamowienia_Odczyt.IsChecked ? 1 : 0)}'," +
+                $"  '{((bool)R_Zamowienia_Zapis.IsChecked ? 1 : 0)}')", baza.conn);
+
+            baza.conn.Open();
+            cmd.ExecuteNonQuery();
+            baza.conn.Close();
+            Odswiez_Baze();
+            dgRole.Items.Refresh();
+        }
+
+        private void Button_Click_Aktualizuj_Role(object sender, RoutedEventArgs e)
+        {
+            if (!baza.role.Exists(x => x.rola == R_Nazwa.Text))
+            {
+                MessageBox.Show("Podana rola nie istnieje!");
+                return;
+            }
+
+            var cmd = new OleDbCommand(
+                $"UPDATE Role SET " +
+                $"  Rola='{R_Nazwa.Text}'," +
+                $"  Adresy_Odczyt='{((bool)R_Adresy_Odczyt.IsChecked ? 1 : 0)}'," +
+                $"  Adresy_Zapis='{((bool)R_Adresy_Zapis.IsChecked ? 1 : 0)}'," +
+                $"  Konta_Odczyt='{((bool)R_Konta_Odczyt.IsChecked ? 1 : 0)}'," +
+                $"  Konta_Zapis='{((bool)R_Konta_Zapis.IsChecked ? 1 : 0)}'," +
+                $"  Oceny_Odczyt='{((bool)R_Oceny_Odczyt.IsChecked ? 1 : 0)}'," +
+                $"  Oceny_Zapis='{((bool)R_Oceny_Zapis.IsChecked ? 1 : 0)}'," +
+                $"  Produkty_Odczyt='{((bool)R_Produkty_Odczyt.IsChecked ? 1 : 0)}'," +
+                $"  Produkty_Zapis='{((bool)R_Produkty_Zapis.IsChecked ? 1 : 0)}'," +
+                $"  Role_Odczyt='{((bool)R_Role_Odczyt.IsChecked ? 1 : 0)}'," +
+                $"  Role_Zapis='{((bool)R_Role_Zapis.IsChecked ? 1 : 0)}'," +
+                $"  Transakcje_Odczyt='{((bool)R_Transakcje_Odczyt.IsChecked ? 1 : 0)}'," +
+                $"  Transakcje_Zapis='{((bool)R_Transakcje_Zapis.IsChecked ? 1 : 0)}'," +
+                $"  Zamówienia_Odczyt='{((bool)R_Zamowienia_Odczyt.IsChecked ? 1 : 0)}'," +
+                $"  Zamówienia_Zapis='{((bool)R_Zamowienia_Zapis.IsChecked ? 1 : 0)}'" +
+                $"  WHERE Rola='{R_Nazwa.Text}'", baza.conn);
+
+            baza.conn.Open();
+            cmd.ExecuteNonQuery();
+            baza.conn.Close();
+            Odswiez_Baze();
+            dgRole.Items.Refresh();
+        }
+
+        private void Button_Click_Usun_Role(object sender, RoutedEventArgs e)
+        {
+            if (!baza.role.Exists(x => x.rola == R_Nazwa.Text))
+            {
+                MessageBox.Show("Podana rola nie istnieje!");
+                return;
+            }
+
+            var cmd = new OleDbCommand(
+                $"DELETE FROM Role WHERE Rola='{R_Nazwa.Text}'", baza.conn);
+
+            baza.conn.Open();
+            cmd.ExecuteNonQuery();
+            baza.conn.Close();
+            Odswiez_Baze();
+            dgRole.Items.Refresh();
+        }
     }
 }
